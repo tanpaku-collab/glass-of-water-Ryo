@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>水入れゲーム - 目標の高さで止めよう！</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      /* スマホでの連打によるズームや選択を防止 */
+      touch-action: manipulation;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    
+    @keyframes gradientShift {
+      0%   { background-position: 0% 50%; }
+      50%  { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+
+    @keyframes float1 {
+      0%, 100% { transform: translateY(0) translateX(0) scale(1); }
+      33%       { transform: translateY(-40px) translateX(20px) scale(1.1); }
+      66%       { transform: translateY(20px) translateX(-15px) scale(0.95); }
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', sans-serif;
+      background: linear-gradient(-45deg, #ee7752, #e73c7e, #23a6d5, #23d5ab, #a855f7, #f59e0b);
+      background-size: 400% 400%;
+      animation: gradientShift 6s ease infinite;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      color: #333;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .game-container {
+      position: relative;
+      z-index: 1;
+      background: rgba(255, 255, 255, 0.85);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border-radius: 24px;
+      padding: 2rem;
+      max-width: 450px;
+      width: 100%;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+    }
+    
+    .level-display {
+      text-align: center;
+      margin-bottom: 1rem;
+    }
+    
+    .level-number { font-size: 14px; color: #666; }
+    .target-amount { font-size: 28px; font-weight: 800; color: #2c3e50; }
+    
+    .lives-display {
+      text-align: center;
+      font-size: 20px;
+      margin-bottom: 1rem;
+      height: 30px;
+    }
+    
+    .heart { display: inline-block; transition: 0.3s; }
+    .heart.lost { opacity: 0.2; transform: scale(0.8); filter: grayscale(1); }
+    
+    .game-area {
+      display: flex;
+      justify-content: center;
+      margin-bottom: 1.5rem;
+    }
+    
+    .container-box {
+      width: 120px;
+      height: 250px;
+      border: 4px solid #333;
+      border-top: none;
+      border-radius: 0 0 12px 12px;
+      position: relative;
+      background: rgba(255, 255, 255, 0.5);
+      overflow: hidden;
+      cursor: pointer;
+    }
+    
+    .target-line {
+      position: absolute;
+      width: 100%;
+      height: 3px;
+      background: #ff4757;
+      z-index: 5;
+      box-shadow: 0 0 8px rgba(255, 71, 87, 0.5);
+    }
+    
+    .target-label {
+      position: absolute;
+      right: 105%;
+      top: -10px;
+      font-size: 12px;
+      font-weight: bold;
+      color: #ff4757;
+    }
+    
+    .water {
+      position: absolute;
+      bottom: 0;
+      width: 100%;
+      background: linear-gradient(180deg, #3498db 0%, #2980b9 100%);
+      border-top: 2px solid #fff;
+    }
+    
+    .water-text {
+      position: absolute;
+      width: 100%;
+      bottom: 10px;
+      text-align: center;
+      color: white;
+      font-weight: bold;
+      text-shadow: 0 1px 3px rgba(0,0,0,0.5);
+    }
+    
+    .status {
+      padding: 1rem;
+      border-radius: 12px;
+      text-align: center;
+      font-weight: bold;
+      margin-bottom: 1rem;
+      min-height: 54px;
+    }
+    .neutral { background: #eee; }
+    .success { background: #d4edda; color: #155724; }
+    .fail { background: #f8d7da; color: #721c24; }
+    
+    .score-display {
+      display: flex;
+      justify-content: space-around;
+      border-top: 1px solid #ddd;
+      padding-top: 1rem;
+    }
+    
+    .score-label { font-size: 12px; color: #666; }
+    .score-value { font-size: 18px; font-weight: bold; }
+
+    button {
+      width: 100%;
+      padding: 12px;
+      border-radius: 12px;
+      border: none;
+      background: #333;
+      color: white;
+      font-weight: bold;
+      cursor: pointer;
+      margin-top: 10px;
+    }
+
+    .game-over-overlay {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.8);
+      z-index: 100;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: white;
+    }
+    .game-over-overlay.show { display: flex; }
+  </style>
+</head>
+<body>
+
+<div class="game-over-overlay" id="game-over-overlay">
+  <h2 style="font-size: 40px; margin-bottom: 10px;">💀 GAME OVER</h2>
+  <p style="margin-bottom: 20px;">到達レベル: <span id="final-level">1</span></p>
+  <button onclick="resetGame()" style="width: 200px; background: #fff; color: #000;">もう一度挑戦</button>
+</div>
+
+<div class="game-container">
+  <div class="level-display">
+    <div class="level-number">LEVEL <span id="level">1</span></div>
+    <div class="target-amount">目標: <span id="target">100</span> mL</div>
+  </div>
+  
+  <div class="lives-display" id="lives-display">
+    </div>
+  
+  <div class="game-area">
+    <div class="container-box" id="game-box" onmousedown="startPouring()" onmouseup="stopPouring()" ontouchstart="startPouring(event)" ontouchend="stopPouring(event)">
+      <div class="target-line" id="target-line">
+        <span class="target-label">TARGET</span>
+      </div>
+      <div class="water" id="water" style="height: 0%;"></div>
+      <div class="water-text" id="water-current">0 mL</div>
+    </div>
+  </div>
+  
+  <div id="status" class="status neutral">長押しして水を溜めよう！</div>
+  
+  <div class="score-display">
+    <div style="text-align: center;">
+      <div class="score-label">前回の誤差</div>
+      <div class="score-value" id="last-diff">--</div>
+    </div>
+    <div style="text-align: center;">
+      <div class="score-label">最高レベル</div>
+      <div class="score-value" id="best-level">1</div>
+    </div>
+  </div>
+  <button onclick="resetGame()">最初からリセット</button>
+</div>
+
+<script>
+  let currentLevel = 1;
+  let lives = 5;
+  let targetAmount = 0;
+  let currentAmount = 0;
+  let isPouring = false;
+  let pourInterval;
+  let bestLevel = 1;
+  let gameActive = true;
+
+  const waterEl = document.getElementById('water');
+  const waterTextEl = document.getElementById('water-current');
+  const targetLineEl = document.getElementById('target-line');
+  const statusEl = document.getElementById('status');
+  const livesDisplay = document.getElementById('lives-display');
+
+  function initLevel() {
+    gameActive = true;
+    currentAmount = 0;
+    // レベルが上がるほど目標がランダムになり、増えるスピードも調整可能
+    targetAmount = Math.floor(Math.random() * 150) + 50; 
+    document.getElementById('target').textContent = targetAmount;
+    document.getElementById('level').textContent = currentLevel;
+    
+    // ターゲットラインの位置調整 (容器の高さ 250px に対して)
+    // 250mlを最大とする
+    const targetPercent = (targetAmount / 250) * 100;
+    targetLineEl.style.bottom = targetPercent + '%';
+    
+    updateWater();
+    updateLives();
+    statusEl.textContent = "長押しで注水開始！";
+    statusEl.className = "status neutral";
+  }
+
+  function updateWater() {
+    const percent = (currentAmount / 250) * 100;
+    waterEl.style.height = percent + '%';
+    waterTextEl.textContent = Math.floor(currentAmount) + " mL";
+  }
+
+  function updateLives() {
+    livesDisplay.innerHTML = '';
+    for(let i=0; i<5; i++) {
+      const span = document.createElement('span');
+      span.className = i < lives ? 'heart' : 'heart lost';
+      span.textContent = '❤️';
+      livesDisplay.appendChild(span);
+    }
+  }
+
+  function startPouring(e) {
+    if (e) e.preventDefault();
+    if (!gameActive || lives <= 0) return;
+    isPouring = true;
+    statusEl.textContent = "注水中...";
+    
+    pourInterval = setInterval(() => {
+      // レベルが上がると少しずつ速くなる
+      currentAmount += (1 + (currentLevel * 0.1)); 
+      updateWater();
+      if (currentAmount > 250) stopPouring();
+    }, 20);
+  }
+
+  function stopPouring(e) {
+    if (e) e.preventDefault();
+    if (!isPouring) return;
+    isPouring = false;
+    clearInterval(pourInterval);
+    checkResult();
+  }
+
+  function checkResult() {
+    gameActive = false;
+    const diff = Math.abs(targetAmount - Math.floor(currentAmount));
+    document.getElementById('last-diff').textContent = diff + " mL";
+
+    // 許容誤差。レベルが上がると厳しくしても面白い
+    const tolerance = 5; 
+
+    if (diff <= tolerance) {
+      statusEl.textContent = `成功！ 誤差: ${diff}mL`;
+      statusEl.className = "status success";
+      currentLevel++;
+      if(currentLevel > bestLevel) bestLevel = currentLevel;
+      document.getElementById('best-level').textContent = bestLevel;
+      setTimeout(initLevel, 1500);
+    } else {
+      lives--;
+      updateLives();
+      if (lives <= 0) {
+        gameOver();
+      } else {
+        statusEl.textContent = `失敗！ 誤差: ${diff}mL (許容: ${tolerance}mL)`;
+        statusEl.className = "status fail";
+        setTimeout(initLevel, 1500);
+      }
+    }
+  }
+
+  function gameOver() {
+    document.getElementById('final-level').textContent = currentLevel;
+    document.getElementById('game-over-overlay').classList.add('show');
+  }
+
+  function resetGame() {
+    currentLevel = 1;
+    lives = 5;
+    document.getElementById('game-over-overlay').classList.remove('show');
+    initLevel();
+  }
+
+  // 初期化
+  initLevel();
+</script>
+
+</body>
+</html>
